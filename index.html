@@ -73,36 +73,40 @@
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <div class="text-sm text-slate-500 font-medium mb-1">Cosine Distance</div>
-                        <div class="flex items-baseline gap-2">
-                            <span id="distVal" class="text-3xl font-bold text-indigo-600">0.000</span>
-                            <span class="text-xs text-slate-400">(0 = identical, 2 = opposites)</span>
-                        </div>
-                    </div>
-                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                         <div class="text-sm text-slate-500 font-medium mb-1">Cosine Similarity</div>
                         <div class="flex items-baseline gap-2">
                             <span id="simVal" class="text-3xl font-bold text-emerald-600">0.000</span>
                             <span class="text-xs text-slate-400">(-1 to 1)</span>
                         </div>
                     </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div class="text-sm text-slate-500 font-medium mb-1">Cosine Distance</div>
+                        <div class="flex items-baseline gap-2">
+                            <span id="distVal" class="text-3xl font-bold text-indigo-600">0.000</span>
+                            <span class="text-xs text-slate-400">(0 = identical, 2 = opposites)</span>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="space-y-2">
-                    <div class="flex justify-between text-xs font-medium text-slate-500">
-                        <span>Identical Meaning (Distance 0)</span>
-                        <span>Opposite Meaning (Distance 2)</span>
+                <!-- SIMILARITY BAR -->
+                <div class="space-y-2 relative pt-2">
+                    <div class="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                        <span>Opposite (-1)</span>
+                        <span class="text-emerald-600">Identical (1)</span>
                     </div>
-                    <div class="w-full h-4 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200 shadow-inner">
-                        <div id="distLine" class="h-full bg-gradient-to-r from-emerald-400 to-rose-500 w-0 transition-all duration-1000 ease-out rounded-full absolute left-0 top-0"></div>
-                        <!-- Marker line -->
-                        <div class="absolute left-1/2 top-0 bottom-0 w-px bg-slate-300 z-10"></div>
+                    
+                    <div class="w-full h-6 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200 shadow-inner">
+                        <!-- Dynamic solid color bar -->
+                        <div id="simLine" class="h-full w-0 transition-all duration-1000 ease-out rounded-full absolute left-0 top-0"></div>
                     </div>
+                    <p class="text-[10px] text-slate-400 text-center mt-1">
+                        * Bar width and color use an exponential curve to compress unrelated concepts and emphasize slight differences in highly similar text.
+                    </p>
                 </div>
             </div>
 
             <!-- Visualization -->
-            <div class="pt-4 border-t border-slate-100">
+            <div class="pt-6 border-t border-slate-100">
                 <h3 class="text-lg font-bold text-slate-900 mb-2">Visualized Embeddings (384 Dimensions)</h3>
                 <p class="text-sm text-slate-500 mb-6">
                     <span class="inline-block w-3 h-3 bg-blue-500 rounded-sm mr-1 align-middle"></span> Positive activation
@@ -139,7 +143,7 @@
         const resultsEl = document.getElementById('results');
         const distValEl = document.getElementById('distVal');
         const simValEl = document.getElementById('simVal');
-        const distLineEl = document.getElementById('distLine');
+        const simLineEl = document.getElementById('simLine');
         const canvas1 = document.getElementById('canvas1');
         const canvas2 = document.getElementById('canvas2');
         const label1 = document.getElementById('label1');
@@ -151,7 +155,6 @@
         // Load the model on startup
         async function init() {
             try {
-                // Initialize the feature extraction pipeline
                 extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
                 
                 statusEl.textContent = "Model loaded & ready.";
@@ -192,40 +195,49 @@
 
             try {
                 // Generate embeddings
-                // pooling: 'mean' averages the token embeddings into a single sentence embedding
-                // normalize: true scales the vector to a magnitude of 1, making cosine similarity just a dot product
                 const out1 = await extractor(text1, { pooling: 'mean', normalize: true });
                 const out2 = await extractor(text2, { pooling: 'mean', normalize: true });
 
-                // Extract the raw float arrays (384 dimensions)
                 const vec1 = Array.from(out1.data);
                 const vec2 = Array.from(out2.data);
 
-                // Calculate Cosine Similarity (Dot product of normalized vectors)
+                // Calculate Cosine Similarity
                 let similarity = 0;
                 for (let i = 0; i < vec1.length; i++) {
                     similarity += vec1[i] * vec2[i];
                 }
                 
-                // Calculate Distance (0 to 2 range)
+                // Calculate Distance
                 const distance = 1 - similarity;
 
                 // Update UI numbers
                 simValEl.textContent = similarity.toFixed(4);
                 distValEl.textContent = distance.toFixed(4);
                 
-                // Set labels
                 label1.textContent = `Vector 1: "${text1}"`;
                 label2.textContent = `Vector 2: "${text2}"`;
 
-                // Show results container if hidden
                 resultsEl.classList.remove('hidden');
 
-                // Update distance visual line (width based on distance max of 2)
-                // We use a small timeout to allow CSS transition to trigger after display:block
+                // NEW: Continuous Exponential (Cubic) Scale for Width and Color
                 setTimeout(() => {
-                    const widthPct = Math.max(0, Math.min(100, (distance / 2) * 100));
-                    distLineEl.style.width = `${widthPct}%`;
+                    // 1. Normalize Similarity from [-1, 1] to [0.0, 1.0]
+                    const normalizedSim = (similarity + 1) / 2;
+                    
+                    // 2. Apply a cubic curve (x^3). 
+                    // This naturally compresses the bottom half (sim 0 = 12.5% width) 
+                    // and expands the top half, making high similarities very sensitive.
+                    const curveValue = Math.pow(normalizedSim, 3);
+                    
+                    // 3. Map to percentage width
+                    const widthPct = curveValue * 100;
+
+                    // 4. Map the same curve to Color (Hue)
+                    // 0 = Red, 120 = Green. The color stays warmer longer.
+                    const hue = curveValue * 120;
+                    
+                    simLineEl.style.width = `${widthPct}%`;
+                    simLineEl.style.backgroundColor = `hsl(${hue}, 80%, 45%)`;
                 }, 50);
 
                 // Draw the heatmaps
@@ -256,21 +268,18 @@
             const dimensions = vector.length;
             const barWidth = width / dimensions;
 
-            // Find max absolute value to dynamically scale colors for maximum contrast
             const maxAbs = Math.max(...vector.map(Math.abs));
 
             vector.forEach((val, i) => {
-                const normVal = maxAbs === 0 ? 0 : val / maxAbs; // Normalize between -1 and 1 based on local max
+                const normVal = maxAbs === 0 ? 0 : val / maxAbs;
                 
                 let r = 255, g = 255, b = 255;
                 if (normVal > 0) {
-                    // Positive values: White to Blue
                     const intensity = Math.floor(normVal * 255);
                     r = 255 - intensity;
                     g = 255 - intensity;
                     b = 255;
                 } else {
-                    // Negative values: White to Red
                     const intensity = Math.floor(Math.abs(normVal) * 255);
                     r = 255;
                     g = 255 - intensity;
@@ -278,7 +287,6 @@
                 }
 
                 ctx.fillStyle = `rgb(${r},${g},${b})`;
-                // Overlap by 1px to prevent anti-aliasing gaps between bars
                 ctx.fillRect(Math.floor(i * barWidth), 0, Math.ceil(barWidth), height);
             });
         }

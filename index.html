@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actual Vector Embeddings Demonstrator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen p-4 md:p-8">
+
+    <div class="max-w-3xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div class="text-center space-y-2">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Vector Embeddings</h1>
+            <p class="text-slate-600">
+                Running a real 384-dimensional Sentence Transformer model (<code class="bg-slate-200 px-1.5 py-0.5 rounded text-sm text-indigo-700">all-MiniLM-L6-v2</code>) entirely in your browser.
+            </p>
+        </div>
+
+        <!-- Input Section -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div>
+                <label for="text1" class="block text-sm font-semibold text-slate-700 mb-1">First Sequence</label>
+                <input type="text" id="text1" value="The quick brown fox jumps over the lazy dog." 
+                    class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    placeholder="Enter first text...">
+            </div>
+            
+            <div>
+                <label for="text2" class="block text-sm font-semibold text-slate-700 mb-1">Second Sequence</label>
+                <input type="text" id="text2" value="A fast dark-colored fox leaps above a sleepy hound." 
+                    class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    placeholder="Enter second text...">
+            </div>
+
+            <div id="error-msg" class="hidden text-red-500 text-sm font-medium">Please enter text in both fields.</div>
+            
+            <div class="flex flex-col sm:flex-row items-center gap-4 pt-2">
+                <button id="calcBtn" disabled 
+                    class="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg shadow-sm hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-100 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all">
+                    Loading Model...
+                </button>
+                <div id="status" class="text-sm text-slate-500 font-medium flex items-center gap-2">
+                    <svg class="animate-spin h-4 w-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" id="loading-spinner">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="status-text">Downloading ~22MB model weights (first run only)...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200 fade-in space-y-8">
+            
+            <!-- Distance Metrics -->
+            <div>
+                <h2 class="text-xl font-bold text-slate-900 mb-4">Comparison Results</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div class="text-sm text-slate-500 font-medium mb-1">Cosine Distance</div>
+                        <div class="flex items-baseline gap-2">
+                            <span id="distVal" class="text-3xl font-bold text-indigo-600">0.000</span>
+                            <span class="text-xs text-slate-400">(0 = identical, 2 = opposites)</span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div class="text-sm text-slate-500 font-medium mb-1">Cosine Similarity</div>
+                        <div class="flex items-baseline gap-2">
+                            <span id="simVal" class="text-3xl font-bold text-emerald-600">0.000</span>
+                            <span class="text-xs text-slate-400">(-1 to 1)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs font-medium text-slate-500">
+                        <span>Identical Meaning (Distance 0)</span>
+                        <span>Opposite Meaning (Distance 2)</span>
+                    </div>
+                    <div class="w-full h-4 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200 shadow-inner">
+                        <div id="distLine" class="h-full bg-gradient-to-r from-emerald-400 to-rose-500 w-0 transition-all duration-1000 ease-out rounded-full absolute left-0 top-0"></div>
+                        <!-- Marker line -->
+                        <div class="absolute left-1/2 top-0 bottom-0 w-px bg-slate-300 z-10"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization -->
+            <div class="pt-4 border-t border-slate-100">
+                <h3 class="text-lg font-bold text-slate-900 mb-2">Visualized Embeddings (384 Dimensions)</h3>
+                <p class="text-sm text-slate-500 mb-6">
+                    <span class="inline-block w-3 h-3 bg-blue-500 rounded-sm mr-1 align-middle"></span> Positive activation
+                    <span class="inline-block w-3 h-3 bg-red-500 rounded-sm ml-3 mr-1 align-middle"></span> Negative activation. 
+                    <br>Compare the vertical bands to see how the AI "understands" similarities.
+                </p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <canvas id="canvas1" width="768" height="60" class="w-full h-16 bg-slate-100 rounded border border-slate-200 shadow-inner block"></canvas>
+                        <div class="text-xs font-medium text-slate-500 mt-2 truncate" id="label1">Sequence 1</div>
+                    </div>
+                    
+                    <div>
+                        <canvas id="canvas2" width="768" height="60" class="w-full h-16 bg-slate-100 rounded border border-slate-200 shadow-inner block"></canvas>
+                        <div class="text-xs font-medium text-slate-500 mt-2 truncate" id="label2">Sequence 2</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Import Transformers.js -->
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0';
+
+        // Prevent looking for local file paths, force downloading from Hugging Face Hub
+        env.allowLocalModels = false;
+
+        const calcBtn = document.getElementById('calcBtn');
+        const statusEl = document.getElementById('status-text');
+        const spinnerEl = document.getElementById('loading-spinner');
+        const resultsEl = document.getElementById('results');
+        const distValEl = document.getElementById('distVal');
+        const simValEl = document.getElementById('simVal');
+        const distLineEl = document.getElementById('distLine');
+        const canvas1 = document.getElementById('canvas1');
+        const canvas2 = document.getElementById('canvas2');
+        const label1 = document.getElementById('label1');
+        const label2 = document.getElementById('label2');
+        const errorMsg = document.getElementById('error-msg');
+
+        let extractor;
+
+        // Load the model on startup
+        async function init() {
+            try {
+                // Initialize the feature extraction pipeline
+                extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+                
+                statusEl.textContent = "Model loaded & ready.";
+                statusEl.classList.add('text-emerald-600');
+                spinnerEl.classList.add('hidden');
+                
+                calcBtn.disabled = false;
+                calcBtn.textContent = "Calculate Embeddings";
+            } catch (error) {
+                statusEl.textContent = "Error loading model. Check console.";
+                statusEl.classList.add('text-red-500');
+                spinnerEl.classList.add('hidden');
+                console.error("Transformers.js Error:", error);
+            }
+        }
+
+        init();
+
+        calcBtn.addEventListener('click', async () => {
+            const text1 = document.getElementById('text1').value.trim();
+            const text2 = document.getElementById('text2').value.trim();
+
+            if (!text1 || !text2) {
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+            errorMsg.classList.add('hidden');
+
+            // UI loading state
+            calcBtn.disabled = true;
+            calcBtn.textContent = "Processing...";
+            spinnerEl.classList.remove('hidden');
+            statusEl.textContent = "Generating 384-dimensional vectors...";
+            statusEl.classList.remove('text-emerald-600');
+            
+            // Allow UI to update before heavy computation
+            await new Promise(r => setTimeout(r, 50));
+
+            try {
+                // Generate embeddings
+                // pooling: 'mean' averages the token embeddings into a single sentence embedding
+                // normalize: true scales the vector to a magnitude of 1, making cosine similarity just a dot product
+                const out1 = await extractor(text1, { pooling: 'mean', normalize: true });
+                const out2 = await extractor(text2, { pooling: 'mean', normalize: true });
+
+                // Extract the raw float arrays (384 dimensions)
+                const vec1 = Array.from(out1.data);
+                const vec2 = Array.from(out2.data);
+
+                // Calculate Cosine Similarity (Dot product of normalized vectors)
+                let similarity = 0;
+                for (let i = 0; i < vec1.length; i++) {
+                    similarity += vec1[i] * vec2[i];
+                }
+                
+                // Calculate Distance (0 to 2 range)
+                const distance = 1 - similarity;
+
+                // Update UI numbers
+                simValEl.textContent = similarity.toFixed(4);
+                distValEl.textContent = distance.toFixed(4);
+                
+                // Set labels
+                label1.textContent = `Vector 1: "${text1}"`;
+                label2.textContent = `Vector 2: "${text2}"`;
+
+                // Show results container if hidden
+                resultsEl.classList.remove('hidden');
+
+                // Update distance visual line (width based on distance max of 2)
+                // We use a small timeout to allow CSS transition to trigger after display:block
+                setTimeout(() => {
+                    const widthPct = Math.max(0, Math.min(100, (distance / 2) * 100));
+                    distLineEl.style.width = `${widthPct}%`;
+                }, 50);
+
+                // Draw the heatmaps
+                drawEmbedding(vec1, canvas1);
+                drawEmbedding(vec2, canvas2);
+
+                statusEl.textContent = "Embeddings calculated successfully.";
+                statusEl.classList.add('text-emerald-600');
+            } catch (err) {
+                console.error("Calculation Error:", err);
+                statusEl.textContent = "An error occurred during calculation.";
+                statusEl.classList.add('text-red-500');
+            }
+
+            // Restore UI state
+            calcBtn.disabled = false;
+            calcBtn.textContent = "Calculate Embeddings";
+            spinnerEl.classList.add('hidden');
+        });
+
+        // Draws the vector as a color-coded barcode
+        function drawEmbedding(vector, canvas) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+
+            const dimensions = vector.length;
+            const barWidth = width / dimensions;
+
+            // Find max absolute value to dynamically scale colors for maximum contrast
+            const maxAbs = Math.max(...vector.map(Math.abs));
+
+            vector.forEach((val, i) => {
+                const normVal = maxAbs === 0 ? 0 : val / maxAbs; // Normalize between -1 and 1 based on local max
+                
+                let r = 255, g = 255, b = 255;
+                if (normVal > 0) {
+                    // Positive values: White to Blue
+                    const intensity = Math.floor(normVal * 255);
+                    r = 255 - intensity;
+                    g = 255 - intensity;
+                    b = 255;
+                } else {
+                    // Negative values: White to Red
+                    const intensity = Math.floor(Math.abs(normVal) * 255);
+                    r = 255;
+                    g = 255 - intensity;
+                    b = 255 - intensity;
+                }
+
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                // Overlap by 1px to prevent anti-aliasing gaps between bars
+                ctx.fillRect(Math.floor(i * barWidth), 0, Math.ceil(barWidth), height);
+            });
+        }
+    </script>
+</body>
+</html>
